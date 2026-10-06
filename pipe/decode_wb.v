@@ -11,7 +11,7 @@ module decode_wb(
 
   reg_mem0,reg_mem1,reg_mem2,reg_mem3,reg_mem4,reg_mem5,
   reg_mem6,reg_mem7,reg_mem8,reg_mem9,reg_mem10,reg_mem11,
-  reg_mem12,reg_mem13,reg_mem14
+  reg_mem12,reg_mem13,reg_mem14,reg_mem15 // Adicionado reg_mem15
 );
 
   input clk;
@@ -45,8 +45,10 @@ module decode_wb(
   output reg [63:0] reg_mem12;
   output reg [63:0] reg_mem13;
   output reg [63:0] reg_mem14;
+  output reg [63:0] reg_mem15; // Adicionado output para o %r15
 
-  reg [63:0] reg_mem[0:14];
+  // Expandido de [0:14] para [0:15] para acomodar o %r15 real
+  reg [63:0] reg_mem[0:15]; 
 
   initial begin
     reg_mem[0]=64'd0;
@@ -64,106 +66,99 @@ module decode_wb(
     reg_mem[12]=64'd12;
     reg_mem[13]=64'd13;
     reg_mem[14]=64'd14;
+    reg_mem[15]=64'd15; // Inicialização do %r15
   end
 
-  //decode
-
+  // --- DECODE (Bloco Combinacional) ---
   always@(*)
   begin
-    if(d_icode==4'b0010) //cmovxx
+    // Inicialização padrão para evitar latches indesejados
+    d_valA = 64'b0;
+    d_valB = 64'b0;
+
+    if(d_icode==4'b0010) // cmovxx
     begin
       d_valA=reg_mem[d_rA];
     end
-    else if(d_icode==4'b0100) //rmmovq
-    begin
-      d_valA=reg_mem[d_rA];
-      d_valB=reg_mem[d_rB];
-    end
-    else if(d_icode==4'b0101) //mrmovq
-    begin
-      d_valB=reg_mem[d_rB];
-    end
-    else if(d_icode==4'b0110) //OPq
+    else if(d_icode==4'b0100) // rmmovq
     begin
       d_valA=reg_mem[d_rA];
       d_valB=reg_mem[d_rB];
     end
-    else if(d_icode==4'b1000) //call
+    else if(d_icode==4'b0101) // mrmovq
     begin
-      d_valB=reg_mem[4]; //rsp
+      d_valB=reg_mem[d_rB];
     end
-    else if(d_icode==4'b1001) //ret
-    begin
-      d_valA=reg_mem[4]; //rsp
-      d_valB=reg_mem[4]; //rsp
-    end
-    else if(d_icode==4'b1010) //pushq
+    else if(d_icode==4'b0110) // OPq
     begin
       d_valA=reg_mem[d_rA];
-      d_valB=reg_mem[4]; //rsp
+      d_valB=reg_mem[d_rB];
     end
-    else if(d_icode==4'b1011) //popq
+    else if(d_icode==4'b1000) // call
     begin
-      d_valA=reg_mem[4]; //rsp
-      d_valB=reg_mem[4]; //rsp
+      d_valB=reg_mem[4]; // rsp
     end
-    reg_mem0=reg_mem[0];
-    reg_mem1=reg_mem[1];
-    reg_mem2=reg_mem[2];
-    reg_mem3=reg_mem[3];
-    reg_mem4=reg_mem[4];
-    reg_mem5=reg_mem[5];
-    reg_mem6=reg_mem[6];
-    reg_mem7=reg_mem[7];
-    reg_mem8=reg_mem[8];
-    reg_mem9=reg_mem[9];
-    reg_mem10=reg_mem[10];
-    reg_mem11=reg_mem[11];
-    reg_mem12=reg_mem[12];
-    reg_mem13=reg_mem[13];
-    reg_mem14=reg_mem[14];
+    else if(d_icode==4'b1001) // ret
+    begin
+      d_valA=reg_mem[4]; // rsp
+      d_valB=reg_mem[4]; // rsp
+    end
+    else if(d_icode==4'b1010) // pushq
+    begin
+      d_valA=reg_mem[d_rA];
+      d_valB=reg_mem[4]; // rsp
+    end
+    else if(d_icode==4'b1011) // popq
+    begin
+      d_valA=reg_mem[4]; // rsp
+      d_valB=reg_mem[4]; // rsp
+    end
   end
 
-  //write_back
-  always@(*)
+  // --- WRITE BACK (Bloco Síncrono com o Clock) ---
+  // Nota: Atualizações de registradores em pipelines reais ocorrem na borda do clock
+  always@(posedge clk)
   begin
-    if(w_icode==4'b0010) //cmovxx
+    if(w_icode==4'b0010) // cmovxx
     begin
       if(w_cnd==1'b1)
       begin
-        reg_mem[w_rB]=w_valE;
+        reg_mem[w_rB]<=w_valE;
       end
     end
-    else if(w_icode==4'b0011) //irmovq
+    else if(w_icode==4'b0011) // irmovq
     begin
-      reg_mem[w_rB]=w_valE;
+      reg_mem[w_rB]<=w_valE;
     end
-    else if(w_icode==4'b0101) //mrmovq
+    else if(w_icode==4'b0101) // mrmovq
     begin
-      reg_mem[w_rA]=w_valM;
+      reg_mem[w_rA]<=w_valM;
     end
-    else if(w_icode==4'b0110) //OPq
+    else if(w_icode==4'b0110) // OPq
     begin
-      reg_mem[w_rB]=w_valE;
+      reg_mem[w_rB]<=w_valE;
     end
-    else if(w_icode==4'b1000) //call
+    else if(w_icode==4'b1000) // call
     begin
-      reg_mem[4]=w_valE;
+      reg_mem[4]<=w_valE;
     end
-    else if(w_icode==4'b1001) //ret
+    else if(w_icode==4'b1001) // ret
     begin
-      reg_mem[4]=w_valE;
+      reg_mem[4]<=w_valE;
     end
-    else if(w_icode==4'b1010) //pushq
+    else if(w_icode==4'b1010) // pushq
     begin
-      reg_mem[4]=w_valE;
+      reg_mem[4]<=w_valE;
     end
-    else if(w_icode==4'b1011) //popq
+    else if(w_icode==4'b1011) // popq
     begin
-      reg_mem[4]=w_valE;
-      reg_mem[w_rA]=w_valM;
+      reg_mem[4]<=w_valE;
+      reg_mem[w_rA]<=w_valM;
     end
+  end
 
+  // --- ATRIBUIÇÃO DAS SAÍDAS PARA MONITORAMENTO ---
+  always@(*) begin
     reg_mem0=reg_mem[0];
     reg_mem1=reg_mem[1];
     reg_mem2=reg_mem[2];
@@ -179,6 +174,7 @@ module decode_wb(
     reg_mem12=reg_mem[12];
     reg_mem13=reg_mem[13];
     reg_mem14=reg_mem[14];
+    reg_mem15=reg_mem[15]; // Saída do novo registrador %r15 exposta
   end
 
 endmodule
